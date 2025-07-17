@@ -1,16 +1,17 @@
 
 
-from typing import Optional
-from sqlalchemy import String , ForeignKey , event  , select , func , create_engine , UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase ,Mapped , mapped_column , Session , Relationship , sessionmaker ,scoped_session
-from pydantic import BaseModel
+from typing import Optional , Dict 
+from sqlalchemy import String , ForeignKey , event  , select , func , create_engine , UniqueConstraint ,JSON
+from sqlalchemy.orm import DeclarativeBase ,Mapped , mapped_column  , sessionmaker ,Session
 
 
 
 class Base(DeclarativeBase):
     pass
 
-
+engine = create_engine("sqlite:///database.db" ,echo=True)
+Session1 = sessionmaker(bind=engine)
+session = Session1()
 
 
 
@@ -26,6 +27,29 @@ class cities(Base):
         self.name = name
         self.code_omor = code_omor
 
+class test_ref(Base):
+    __tablename__ = "tests_refs"
+
+    test_id : Mapped[int] = mapped_column( autoincrement=True , primary_key= True , unique= True)
+    test_name : Mapped[str] = mapped_column(String(50) , unique=True )
+    test_num : Mapped[int] = mapped_column(unique=True)
+    majmo_name : Mapped[str] = mapped_column()
+    additional_attrs: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True)
+    
+
+
+    def __init__(self , name , test_num ,majmo_name, additional):
+        self.test_name = name
+        self.test_num = test_num
+        self.majmo_name = majmo_name
+        self.additional_attrs = additional
+
+
+
+def get_test_by_num(test_num: int, db: Session):
+    stmt = select(test_ref).where(test_ref.test_num == test_num)
+    result = db.execute(stmt).scalars().first()
+    return result
 
 class tests(Base):
     __tablename__ = "tests"
@@ -36,16 +60,28 @@ class tests(Base):
     month : Mapped[int] = mapped_column()
     dardast_ejra : Mapped[int] = mapped_column()
     tahie_soorat_vaziat : Mapped[int] = mapped_column()
-    soorat_vaziat_moshaver : Mapped[int] = mapped_column( nullable= True)
     soorat_vaziat_setad : Mapped[int] = mapped_column()
     soorat_vaziat_mali : Mapped[int] = mapped_column()
-    majmo_test = 0
+    additional_attrs : Mapped[Dict[str,int]] = mapped_column(JSON , default={})
     __table_args__ = (
         UniqueConstraint("city_name", "year", "month" , "test_num", name="uq_city_year_month_test"),
     )
 
     
-    def __init__(self , city_name ,test_num, year , month , dardast_ejra,tahie_soorat_vaziat,soorat_vaziat_setad ,soorat_vaziat_mali , soorat_vaziat_moshaver :Optional[int]):
+    def __init__(self , city_name ,test_num, year , month , dardast_ejra,tahie_soorat_vaziat,soorat_vaziat_setad ,soorat_vaziat_mali , additional :Optional[Dict[str,int]] = None):
+        adds = get_test_by_num(test_num, session)
+        if adds:
+            attrs = adds.additional_attrs or {}
+            if attrs and additional is not None:
+                missing_keys = [k for k in attrs.keys() if k not in additional]
+                if missing_keys:
+                    raise ValueError(f"Missing keys in additional: {missing_keys}")
+                self.additional_attrs = {k: additional[k] for k in attrs.keys()}
+            else:
+                raise ValueError("Expected 'additional' to provide required keys.")
+        else:
+            raise ValueError("Test reference not found for test_num.")
+        
         self.city_name = city_name
         self.test_num = test_num
         self.year = year
@@ -54,12 +90,22 @@ class tests(Base):
         self.tahie_soorat_vaziat = tahie_soorat_vaziat
         self.soorat_vaziat_setad = soorat_vaziat_setad
         self.soorat_vaziat_mali = soorat_vaziat_mali
-        if soorat_vaziat_moshaver is not None:
-            self.soorat_vaziat_moshaver = soorat_vaziat_moshaver
-            self.majmo_test = (dardast_ejra + tahie_soorat_vaziat + soorat_vaziat_setad + soorat_vaziat_mali + soorat_vaziat_moshaver)
-        else:
-            self.majmo_test = (dardast_ejra + tahie_soorat_vaziat + soorat_vaziat_setad + soorat_vaziat_mali)
         
 
-engine = create_engine("sqlite:///database.db")
+
 Base.metadata.create_all(bind=engine)
+
+'''        if adds:
+            attrs = adds.additional_attrs
+            if attrs != {}:
+                if additional is not None:
+                    sum_add = 0
+                    for key in attrs.keys():
+                        sum_add += additional[key]
+                        self.additional_attrs[key] = additional[key]
+                    self.majmo_test = sum_add + dardast_ejra + tahie_soorat_vaziat + soorat_vaziat_setad + soorat_vaziat_mali
+
+            else:
+                self.majmo_test = dardast_ejra + tahie_soorat_vaziat + soorat_vaziat_setad + soorat_vaziat_mali
+        
+'''
