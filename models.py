@@ -1,7 +1,7 @@
 
 
 from typing import Optional , Dict 
-from sqlalchemy import String , ForeignKey , event  , select , func , create_engine , UniqueConstraint ,JSON
+from sqlalchemy import String , ForeignKey , event  , select , func , create_engine , UniqueConstraint ,JSON,null
 from sqlalchemy.orm import DeclarativeBase ,Mapped , mapped_column  , sessionmaker ,Session
 
 
@@ -34,7 +34,7 @@ class test_ref(Base):
     test_name : Mapped[str] = mapped_column(String(50) , unique=True )
     test_num : Mapped[int] = mapped_column(unique=True)
     majmo_name : Mapped[str] = mapped_column()
-    additional_attrs: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True)
+    additional_attrs: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON,default=None)
     
 
 
@@ -62,25 +62,33 @@ class tests(Base):
     tahie_soorat_vaziat : Mapped[int] = mapped_column()
     soorat_vaziat_setad : Mapped[int] = mapped_column()
     soorat_vaziat_mali : Mapped[int] = mapped_column()
-    additional_attrs : Mapped[Dict[str,int]] = mapped_column(JSON , default={})
+    additional_attrs : Mapped[Optional[Dict[str,int]]] = mapped_column(JSON ,nullable=True)
     __table_args__ = (
         UniqueConstraint("city_name", "year", "month" , "test_num", name="uq_city_year_month_test"),
     )
 
     
-    def __init__(self , city_name ,test_num, year , month , dardast_ejra,tahie_soorat_vaziat,soorat_vaziat_setad ,soorat_vaziat_mali , additional :Optional[Dict[str,int]] = None):
+    def __init__(self , city_name ,test_num, year , month , dardast_ejra,tahie_soorat_vaziat,soorat_vaziat_setad ,soorat_vaziat_mali , additional):
         adds = get_test_by_num(test_num, session)
         if adds:
-            attrs = adds.additional_attrs or {}
-            if attrs and additional is not None:
-                missing_keys = [k for k in attrs.keys() if k not in additional]
-                if missing_keys:
-                    raise ValueError(f"Missing keys in additional: {missing_keys}")
-                self.additional_attrs = {k: additional[k] for k in attrs.keys()}
-            else:
-                raise ValueError("Expected 'additional' to provide required keys.")
+            attrs = adds.additional_attrs
+            if attrs is not None:
+                if attrs is not null:
+                    if additional is not None:
+                        
+                        if all(k in additional for k in attrs.keys()):
+                            self.additional_attrs = {k: additional[k] for k in attrs.keys()}
+                        else:
+                            print(attrs)
+                            raise ValueError("Expected 'additional' to provide required keys.")
+                    else:
+                        raise ValueError("Expected 'additional' dict.")
+                elif additional == None:
+                    self.additional_attrs = None
+                    
         else:
             raise ValueError("Test reference not found for test_num.")
+
         
         self.city_name = city_name
         self.test_num = test_num

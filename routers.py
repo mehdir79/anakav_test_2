@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Dict , List , Optional
 from sqlalchemy import create_engine ,and_
 from sqlalchemy.orm import sessionmaker 
-from first_models import cities , test1 ,test2 , test3 , test4 , test5 , test6 , test7 , majmo
+from models import cities , tests ,test_ref
 import traceback
 
 router = APIRouter()
@@ -14,38 +14,98 @@ Session1 = sessionmaker(autoflush= False ,  autocommit = False,bind=engine)
 
 def read():
     with Session1.begin() as con:
-        queries : Dict[str , list] = {}
-        for model in [cities , test1 , test2 , test3 , test4 , test5 , test6 , test7 , majmo]:
-            queries[model.__name__] = con.query(model).all()
+        collection_tests = con.query(tests).all()
+        collection_tests_refs = con.query(test_ref).all()
+        addcols :List[str]= []
         
-        columns : Dict[str , list] = {}
-        for model in [cities , test1 , test2 , test3 , test4 , test5 , test6 , test7 , majmo]:
-            columns[model.__tablename__] = [col for col in model.__table__.columns]
+        if collection_tests is not None:
+            for test in collection_tests:
+                q = test.additional_attrs
+                if q is not None:
+                    for x in q.keys():
+                        if x not in addcols:
+                            addcols.append(x)
         
-        dataframes : Dict[str , pd.DataFrame] = {}
-        for model in [cities , test1 , test2 , test3 , test4 , test5 , test6 , test7 , majmo]:
-            dataframes[model.__tablename__] = pd.DataFrame([
-            {col.name: getattr(row, col.key) for col in columns[model.__tablename__]}
-            for row in queries[model.__name__]
-        ])
-        
-        multi_cols:Dict[str,list] = {}
-        
-        for test in [test1,test2,test3 , test4 , test5 , test6 , test7 , majmo]:
-            multi_cols[test.__tablename__] = []
-            for col in test.__table__.columns:
-                multi_cols[test.__tablename__].append(tuple([test.__tablename__ , col.name]))
-        for test in [test1,test2,test3 , test4 , test5 , test6 , test7 , majmo]:
-        
-            dataframes[test.__tablename__].drop("آیدی" , axis = 1 , inplace = True)
-            dataframes[test.__tablename__].set_index(["نام شهر", "سال","ماه"] , inplace=True)
-            dataframes[test.__tablename__].columns = pd.MultiIndex.from_tuples(multi_cols[test.__tablename__][4:])
-        
-        df = dataframes[test1.__tablename__]
-        for test in [test2,test3 , test4 , test5 , test6 , test7 , majmo]:
-            df = df.join(dataframes[test.__tablename__] ,how="outer")
-        return df
+        addcols.append("dardast_ejra")
+        addcols.append("tahie_soorat_vaziat")
+        addcols.append("soorat_vaziat_setad")
+        addcols.append("soorat_vaziat_mali")
+        print(addcols)
+        rows_data = []  # لیست نهایی که قراره به DataFrame بدیم
+        i = 0
+        '''
+        for row in collection_tests:
+            row_dict = {}
 
+            for col in collection_tests_refs:
+
+                if col.test_num == row.test_num:
+                    
+                    for col1 in addcols:
+                        if hasattr(tests , col1):
+                            
+                            if col1 == "dardast_ejra":
+                                col_name = "در دست اجرا"
+                                col_value = getattr(row, col1)
+                                row_dict[col_name] = col_value
+                                rows_data.append(row_dict)
+                            elif col1 == "tahie_soorat_vaziat":
+                                col_name = "تهیه صورت وضعیت"
+                                col_value = getattr(row, col1)
+                                row_dict[col_name] = col_value
+                                rows_data.append(row_dict)
+                            elif col1 == "soorat_vaziat_setad":
+                                col_name = "صورت وضعیت نزد ستاد"
+                                col_value = getattr(row, col1)
+                                row_dict[col_name] = col_value
+                                rows_data.append(row_dict)
+                            else:
+                                col_name = "صورت وضعیت نزد مالی"
+                                col_value = getattr(row, col1)
+                                row_dict[col_name] = col_value
+                                rows_data.append(row_dict)
+                                    
+                        elif col.additional_attrs and row.additional_attrs:
+                            for key in col.additional_attrs.keys():
+                                if key == col1:
+                                    col_name = col.additional_attrs[key]
+                                    col_value = row.additional_attrs[col1]  # مقدار واقعی در row
+                                    row_dict[col_name] = col_value  # اضافه به دیکشنری
+                                    rows_data.append(row_dict)
+                                    
+                break
+'''
+        for row in collection_tests:
+            row_dict = {}
+            for col in collection_tests_refs:
+                if col.test_num == row.test_num:
+                    for col1 in addcols:
+                        if hasattr(tests, col1):
+                            # چهار ستون اصلی
+                            if col1 == "dardast_ejra":
+                                row_dict["در دست اجرا"] = getattr(row, col1)
+                            elif col1 == "tahie_soorat_vaziat":
+                                row_dict["تهیه صورت وضعیت"] = getattr(row, col1)
+                            elif col1 == "soorat_vaziat_setad":
+                                row_dict["صورت وضعیت نزد ستاد"] = getattr(row, col1)
+                            elif col1 == "soorat_vaziat_mali":
+                                row_dict["صورت وضعیت نزد مالی"] = getattr(row, col1)
+                        elif col.additional_attrs and row.additional_attrs:
+                            # ستون‌های اضافی (دینامیک)
+                            for key in col.additional_attrs.keys():
+                                if key == col1:
+                                    row_dict[col.additional_attrs[key]] = row.additional_attrs.get(col1)
+                    # ✅ اینجا append کن، بعد از اینکه همه ویژگی‌ها اضافه شدن
+                    rows_data.append(row_dict)
+                    break  # فقط اولین ref که match شد کافیه
+
+        
+        df = pd.DataFrame(rows_data)
+
+
+        return df
+print(read())
+'''
 def get_cities_df():
     with Session1.begin() as con:
         cities_query = con.query(cities).all()
@@ -345,4 +405,4 @@ def delete_record(
         print(e)
         traceback.print_exc()
         return {"message": f"something went wrong: {str(e)}"}  
-          
+          '''
