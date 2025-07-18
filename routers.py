@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Dict , List , Optional
 from sqlalchemy import create_engine ,and_
 from sqlalchemy.orm import sessionmaker 
-from models import cities , tests ,test_ref
+from first_models import cities , tests ,test_ref
 import traceback
 import numpy as np
 from pydantic import BaseModel
