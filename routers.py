@@ -1,7 +1,7 @@
 from fastapi import APIRouter , Query
 import pandas as pd
 from typing import Dict , List , Optional
-from sqlalchemy import create_engine ,and_
+from sqlalchemy import create_engine ,and_ , func
 from sqlalchemy.orm import sessionmaker 
 from first_models import cities , tests ,test_ref
 import traceback
@@ -328,14 +328,17 @@ def get_tests(test_num : Optional[int] = Query(description="search by test_num" 
                             addcols.append(x)
         
         
-        rows_data = []  # لیست نهایی که قراره به DataFrame بدیم
+        rows_data = []  
         
         
         for row in data:
             row_dict = {}
             for col in collection_tests_refs:
                 if col.test_num == row.test_num:
+                    if col.majmo_name not in addcols:
+                        addcols.append(col.majmo_name)
                     for col1 in addcols:
+                        sum = 0
                         if hasattr(tests, col1):
                             # چهار ستون اصلی
                             if col1 == "city_name":
@@ -359,7 +362,11 @@ def get_tests(test_num : Optional[int] = Query(description="search by test_num" 
                             # ستون‌های اضافی (دینامیک)
                             for key in col.additional_attrs.keys():
                                 if key == col1:
-                                    row_dict[col.additional_attrs[key]] = row.additional_attrs.get(col1)
+                                    row_dict[col.additional_attrs[key]] = row.additional_attrs[key]    
+                                    sum += row.additional_attrs[col1]
+                        sum += row.dardast_ejra + row.tahie_soorat_vaziat + row.soorat_vaziat_mali + row.soorat_vaziat_setad
+                        row_dict[col.majmo_name] = sum
+                        
                     # ✅ اینجا append کن، بعد از اینکه همه ویژگی‌ها اضافه شدن
                     rows_data.append(row_dict)
                     break  # فقط اولین ref که match شد کافیه
@@ -367,8 +374,105 @@ def get_tests(test_num : Optional[int] = Query(description="search by test_num" 
         df.replace([np.inf, -np.inf , np.nan], None, inplace=True)
         # df.where(pd.notnull(df), None,inplace=True) 
         return df.to_dict(orient="records")
+    
+@router.get("/tests/sum")
+def get_sum():
+    with Session1.begin() as con:
+        allcols = ["city_name" , "test_num" , "year" , "month","dardast_ejra" , "tahie_soorat_vaziat" , "soorat_vaziat_setad"  , "soorat_vaziat_mali"]
+        majmo_Cols = []
+        testha = con.query(tests).all()
+        collection_tests_refs = con.query(test_ref).all()
+        for test in testha:
+            if test.additional_attrs is not None:
+                for key in test.additional_attrs.keys():
+                    if key not in allcols:
+                        allcols.append(key)
+        group_cols = ["نام شهر", "شماره تست", "سال", "ماه"]
+        rows_data = []
+        for test in testha:
+            row_dict = {}
+            for col in collection_tests_refs:
+                if col.test_num == test.test_num:
+                    sum = 0
+                    if col.majmo_name not in majmo_Cols:
+                        majmo_Cols.append(col.majmo_name)
+                    for col1 in allcols:
+                        
+                        if hasattr(tests, col1):
+                            # چهار ستون اصلی
+                            if col1 == "city_name":
+                                row_dict["نام شهر"] = test.city_name
+                            elif col1 == "test_num":
+                                row_dict["شماره تست"] = test.test_num
+                            elif col1 == "year":
+                                row_dict["سال"] = test.year
+                            elif col1 == "month":
+                                row_dict["ماه"] = test.month
+                            elif col1 == "dardast_ejra":
+                                row_dict["در دست اجرا"] = test.dardast_ejra
+                            elif col1 == "tahie_soorat_vaziat":
+                                row_dict["تهیه صورت وضعیت"] = test.tahie_soorat_vaziat
+                            elif col1 == "soorat_vaziat_setad":
+                                row_dict["صورت وضعیت نزد ستاد"] = test.soorat_vaziat_setad
+                            elif col1 == "soorat_vaziat_mali":
+                                row_dict["صورت وضعیت نزد مالی"] = test.soorat_vaziat_mali
+                            
+                        elif col.additional_attrs and test.additional_attrs:
+                            for key in col.additional_attrs.keys():
+                                if key == col1:
+                                    row_dict[col.additional_attrs[key]] = test.additional_attrs[key]    
+                                    sum += test.additional_attrs[col1]
+                    sum += test.dardast_ejra + test.tahie_soorat_vaziat + test.soorat_vaziat_mali + test.soorat_vaziat_setad
+                    row_dict[col.majmo_name] = sum
+                        
+            rows_data.append(row_dict)
+        df = pd.DataFrame(rows_data)
+        df.replace([np.inf, -np.inf , np.nan], None, inplace=True)
+        
+        
+        
+        for col in majmo_Cols:
+            df.drop(col,axis=1,inplace=True)
+        cols_for_sum = list(df.columns)
+        cols_for_sum.remove("نام شهر")
+        cols_for_sum.remove("شماره تست")
+        cols_for_sum.remove("سال")
+        cols_for_sum.remove("ماه")
+        # grouped = df.groupby(group_cols, dropna=False).sum(numeric_only=True).reset_index()
+        a = pd.DataFrame()
+        
+        for i , row in df.iterrows():
+            jam:int  =0
+            for col_t in collection_tests_refs:
+                if row["شماره تست"] == col_t.test_num:
+                    for col in df.columns:
+                        if col in cols_for_sum:
+                            if row[col] is not None:
+                                jam += row[col]
+                            else:
+                                jam +=0
+                    a[col_t.majmo_name]=jam
+        new_df = pd.concat([df,a],axis=1)
+        new_df.replace([np.inf, -np.inf , np.nan], None, inplace=True)
+        g_cols = ["نام شهر" , "سال" , "ماه"]
+        
+        grouped = df.drop("شماره تست",axis=1).groupby(g_cols, dropna=False).sum().reset_index()
+        
+        
+        k_cols = list(grouped.columns)
+        for i in g_cols:
+            k_cols.remove(i)
 
-print(get_tests(None,None,None,None))
+        grouped["کل دستور کارهای باز"] = grouped[k_cols].sum(axis=1, skipna=True)
+        
+        grouped.replace([np.inf, -np.inf , np.nan], None, inplace=True)
+        print(grouped)
+        return grouped.to_dict(orient="records")
+
+                    
+
+
+
 class test_type(BaseModel):
     city_name : str
     test_num : int
