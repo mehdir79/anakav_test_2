@@ -5,6 +5,8 @@ from sqlalchemy import create_engine ,and_
 from sqlalchemy.orm import sessionmaker 
 from models import cities , tests ,test_ref
 import traceback
+import numpy as np
+from pydantic import BaseModel
 
 router = APIRouter()
 # engine = create_engine("mysql+pymysql://root:1234@localhost/test")
@@ -12,100 +14,7 @@ engine = create_engine("sqlite:///database.db")
 Session1 = sessionmaker(autoflush= False ,  autocommit = False,bind=engine)
 
 
-def read():
-    with Session1.begin() as con:
-        collection_tests = con.query(tests).all()
-        collection_tests_refs = con.query(test_ref).all()
-        addcols :List[str]= []
-        
-        if collection_tests is not None:
-            for test in collection_tests:
-                q = test.additional_attrs
-                if q is not None:
-                    for x in q.keys():
-                        if x not in addcols:
-                            addcols.append(x)
-        
-        addcols.append("dardast_ejra")
-        addcols.append("tahie_soorat_vaziat")
-        addcols.append("soorat_vaziat_setad")
-        addcols.append("soorat_vaziat_mali")
-        print(addcols)
-        rows_data = []  # لیست نهایی که قراره به DataFrame بدیم
-        i = 0
-        '''
-        for row in collection_tests:
-            row_dict = {}
 
-            for col in collection_tests_refs:
-
-                if col.test_num == row.test_num:
-                    
-                    for col1 in addcols:
-                        if hasattr(tests , col1):
-                            
-                            if col1 == "dardast_ejra":
-                                col_name = "در دست اجرا"
-                                col_value = getattr(row, col1)
-                                row_dict[col_name] = col_value
-                                rows_data.append(row_dict)
-                            elif col1 == "tahie_soorat_vaziat":
-                                col_name = "تهیه صورت وضعیت"
-                                col_value = getattr(row, col1)
-                                row_dict[col_name] = col_value
-                                rows_data.append(row_dict)
-                            elif col1 == "soorat_vaziat_setad":
-                                col_name = "صورت وضعیت نزد ستاد"
-                                col_value = getattr(row, col1)
-                                row_dict[col_name] = col_value
-                                rows_data.append(row_dict)
-                            else:
-                                col_name = "صورت وضعیت نزد مالی"
-                                col_value = getattr(row, col1)
-                                row_dict[col_name] = col_value
-                                rows_data.append(row_dict)
-                                    
-                        elif col.additional_attrs and row.additional_attrs:
-                            for key in col.additional_attrs.keys():
-                                if key == col1:
-                                    col_name = col.additional_attrs[key]
-                                    col_value = row.additional_attrs[col1]  # مقدار واقعی در row
-                                    row_dict[col_name] = col_value  # اضافه به دیکشنری
-                                    rows_data.append(row_dict)
-                                    
-                break
-'''
-        for row in collection_tests:
-            row_dict = {}
-            for col in collection_tests_refs:
-                if col.test_num == row.test_num:
-                    for col1 in addcols:
-                        if hasattr(tests, col1):
-                            # چهار ستون اصلی
-                            if col1 == "dardast_ejra":
-                                row_dict["در دست اجرا"] = getattr(row, col1)
-                            elif col1 == "tahie_soorat_vaziat":
-                                row_dict["تهیه صورت وضعیت"] = getattr(row, col1)
-                            elif col1 == "soorat_vaziat_setad":
-                                row_dict["صورت وضعیت نزد ستاد"] = getattr(row, col1)
-                            elif col1 == "soorat_vaziat_mali":
-                                row_dict["صورت وضعیت نزد مالی"] = getattr(row, col1)
-                        elif col.additional_attrs and row.additional_attrs:
-                            # ستون‌های اضافی (دینامیک)
-                            for key in col.additional_attrs.keys():
-                                if key == col1:
-                                    row_dict[col.additional_attrs[key]] = row.additional_attrs.get(col1)
-                    # ✅ اینجا append کن، بعد از اینکه همه ویژگی‌ها اضافه شدن
-                    rows_data.append(row_dict)
-                    break  # فقط اولین ref که match شد کافیه
-
-        
-        df = pd.DataFrame(rows_data)
-
-
-        return df
-print(read())
-'''
 def get_cities_df():
     with Session1.begin() as con:
         cities_query = con.query(cities).all()
@@ -140,19 +49,15 @@ def add_city(city_name : str , code_omor : int):
 def delete_city(city_name: str, code_omor: int):
     with Session1.begin() as con:
         # حذف رکوردهای تست‌ها
-        for model in [test1, test2, test3, test4, test5, test6, test7]:
-            records = con.query(model).filter(model.city_name == city_name).all()
-            if len(records) != 0: 
-                for rec in records:
-                    con.delete(rec)
-        mj = con.query(majmo).filter(majmo.city_name == city_name).all()
-        if len(mj) != 0:
-            for i in mj:
-                con.delete(i)
+        records = con.query(tests).filter(tests.city_name == city_name).all()
+        if len(records) != 0: 
+            for rec in records:
+                con.delete(rec)
+        
 
 
     with Session1.begin() as con:
-        # حذف رکورد شهر
+        
         city = con.query(cities).filter(
             cities.name == city_name,
             cities.code_omor == code_omor
@@ -176,233 +81,356 @@ def edit_city(city_name : str , code_omor : int , new_name : str ,  new_code_omo
             return{"massage":"city Edited"}
         else:
             return{"massage":"city not found"}
-    
-
-@router.get("/tests/getall")
-def get_all():
-    data = read()
-    cols = []
-    for column in data.columns:
-        if column[1] == "majmo_test_7":
-            cols.append(column[0][-5:] + " " + 'مجموع دستورکارهای باز توسعه و احداث و اصلاح و روشنایی معابر و برگشتی و طرح جامع بم')
-        else:
-            cols.append(column[0][-5:] + " " + column[1])
         
-    data.columns = cols
-    data.reset_index(inplace=True)
-    data = data.to_dict(orient="dict")
-    return data
+@router.get("/tests_ref/get")
+def get_tests_ref(test_num : Optional[int] = Query(None ,description="search by test_num" ) ,test_name : Optional[str] = Query(None , description="search by test_name") ):
+    with Session1.begin() as con:
+        if test_name is None and test_num is None:
+            c_all = con.query(test_ref).all()
+            cols = []
+            cols.append("test_name")
+            cols.append("test_num")
+            cols.append("majmo_name")
+            cols.append("test_id")
+            cols.append("additional_attrs")
+            rows_data = []
+            for c in c_all:
+                row_dict = {}
+                for col in cols:
+                    if col == "test_name":
+                        row_dict["نام تست"] = c.test_name
+                    elif col == "test_num":
+                        row_dict["شماره تست"] = c.test_num
+                    elif col == "majmo_name":
+                        row_dict["نام ستون مجموع"] =c.majmo_name
+                    elif col == "test_id":
+                        row_dict["آیدی تست"] = c.test_id
+                    else:
+                        if c.additional_attrs is not None:
+                            row_dict["مشخصات خاص تست"] = []
+                            for key in c.additional_attrs.keys():
+                                row_dict["مشخصات خاص تست"].append(c.additional_attrs[key])
+                        else:
+                            row_dict["مشخصات خاص تست"] = None
+                rows_data.append(row_dict)
+            df = pd.DataFrame(rows_data)
+            return df.to_dict(orient="records")
 
+        elif test_name:
+            if test_num:
+                c_all = con.query(test_ref).where(and_(test_ref.test_name == test_name , test_ref.test_num == test_num)).first()
+                if c_all:  
+                    cols = []
+                    cols.append("test_name")
+                    cols.append("test_num")
+                    cols.append("majmo_name")
+                    cols.append("test_id")
+                    cols.append("additional_attrs")
+                    rows_data = []
+                    
+                    row_dict = {}
+                    for col in cols:
+                        if col == "test_name":
+                            row_dict["نام تست"] = c_all.test_name
+                        elif col == "test_num":
+                            row_dict["شماره تست"] = c_all.test_num
+                        elif col == "majmo_name":
+                            row_dict["نام ستون مجموع"] =c_all.majmo_name
+                        elif col == "test_id":
+                            row_dict["آیدی تست"] = c_all.test_id
+                        else:
+                            if c_all.additional_attrs is not None:
+                                row_dict["مشخصات خاص تست"] = []
+                                for key in c_all.additional_attrs.keys():
+                                    row_dict["مشخصات خاص تست"].append(c_all.additional_attrs[key])
+                            else:
+                                row_dict["مشخصات خاص تست"] = None
+                    rows_data.append(row_dict)
+                    df = pd.DataFrame(rows_data)
+                    return df.to_dict(orient="records")
 
-@router.get("/tests/specific_test_records")
-def get_specific_test(testnames : List[str] = Query(default = [test1.__tablename__ , test2.__tablename__ , test3.__tablename__ , test4.__tablename__ , test5.__tablename__ , test6.__tablename__ ,test7.__tablename__ , majmo.__tablename__  ]),
-                      city_name:Optional[str] = Query(default=None)) -> dict:
-    data : pd.DataFrame = read()
-    if len(testnames) == 1:
-        df = data[testnames[0]].reset_index()
-        if city_name is not None:
-            return df[:][df["نام شهر"] == city_name].to_dict()
-        else:
-            return df.to_dict()
-    
-    elif len(testnames) > 1:
-        s_data = data[testnames]
-        cols = []
-        for column in s_data.columns:
-            if column[1] == "majmo_test_7":
-                cols.append(column[0][-5:] + " " + 'مجموع دستورکارهای باز توسعه و احداث و اصلاح و روشنایی معابر و برگشتی و طرح جامع بم')
+                else:
+                    return{"not found"}
             else:
-                cols.append(column[0][-5:] + " " + column[1])    
-        s_data.columns = cols
-        s_data.reset_index(inplace=True)
-        if city_name is not None:
-            return s_data[:][s_data["نام شهر"] == city_name].to_dict(orient="dict")
+                c_all = con.query(test_ref).where(test_ref.test_name == test_name).first()
+                if c_all:
+                    cols = []
+                    cols.append("test_name")
+                    cols.append("test_num")
+                    cols.append("majmo_name")
+                    cols.append("test_id")
+                    cols.append("additional_attrs")
+                    rows_data = []
+                    
+                    row_dict = {}
+                    for col in cols:
+                        if col == "test_name":
+                            row_dict["نام تست"] = c_all.test_name
+                        elif col == "test_num":
+                            row_dict["شماره تست"] = c_all.test_num
+                        elif col == "majmo_name":
+                            row_dict["نام ستون مجموع"] =c_all.majmo_name
+                        elif col == "test_id":
+                            row_dict["آیدی تست"] = c_all.test_id
+                        else:
+                            if c_all.additional_attrs is not None:
+                                row_dict["مشخصات خاص تست"] = []
+                                for key in c_all.additional_attrs.keys():
+                                    row_dict["مشخصات خاص تست"].append(c_all.additional_attrs[key])
+                            else:
+                                row_dict["مشخصات خاص تست"] = None
+                    rows_data.append(row_dict)
+                    df = pd.DataFrame(rows_data)
+                    return df.to_dict(orient="records")
+
+                return{"not found"}
         else:
-            return s_data.to_dict(orient="dict")
-    else:
-        return {"massage" : "something went wrong"}
+            c_all = con.query(test_ref).where(test_ref.test_num == test_num).first()
+            if c_all:
+                cols = []
+                cols.append("test_name")
+                cols.append("test_num")
+                cols.append("majmo_name")
+                cols.append("test_id")
+                cols.append("additional_attrs")
+                rows_data = []
+                
+                row_dict = {}
+                for col in cols:
+                    if col == "test_name":
+                        row_dict["نام تست"] = c_all.test_name
+                    elif col == "test_num":
+                        row_dict["شماره تست"] = c_all.test_num
+                    elif col == "majmo_name":
+                        row_dict["نام ستون مجموع"] =c_all.majmo_name
+                    elif col == "test_id":
+                        row_dict["آیدی تست"] = c_all.test_id
+                    else:
+                        if c_all.additional_attrs is not None:
+                            row_dict["مشخصات خاص تست"] = []
+                            for key in c_all.additional_attrs.keys():
+                                row_dict["مشخصات خاص تست"].append(c_all.additional_attrs[key])
+                        else:
+                            row_dict["مشخصات خاص تست"] = None
+                rows_data.append(row_dict)
+                df = pd.DataFrame(rows_data)
+                return df.to_dict(orient="records")
 
+            return{"not found"}
+            
+@router.post("/tests_ref/add")
+def add_test_ref(test_name : str , test_num : int , majmo_name : str , additional_attrs : Optional[Dict[str , str]] = None):
+    try:
+        new_testref = test_ref(name = test_name , test_num=test_num , majmo_name=majmo_name , additional=additional_attrs)
+        with Session1.begin() as con:
+            con.add(new_testref)
+            con.commit()
+        return{"test_ref added"}
+    except:
+        return{"something went wrong"}
 
+@router.put("/tests_ref/edit")
+def edit_test_ref(oldtestnum : int , test_name : str , test_num : int , majmo_name : str , additional_attrs : Optional[Dict[str , str]] = None):
+    with Session1.begin() as con:
+        the_test = con.query(test_ref).where(test_ref.test_num == oldtestnum).first()
+        if the_test:
+            try:
+                the_test.test_name = test_name 
+                the_test.test_num=test_num 
+                the_test.majmo_name=majmo_name 
+                the_test.additional_attrs=additional_attrs
+                
+                con.commit()
+                return{"test_ref edited"}
+            except:
+                return{"something went wrong"}
+        else:
+            return{"not found"}
 
-@router.post("/tests/add_test_record")
-def add_test(city_name : str = Query(),
-            year : int = Query(),
-            month: int = Query(),
-            dardast_ejra1: int = Query(description="دردست اجرا تست 1:"),
-            tahie_soorat_vaziat1 : int = Query(description="تهیه صورت وضعیت تست 1"),
-            soorat_vaziat_setad1 : int = Query(description="صورت وضعیت نزد ستاد تست 1"),
-            soorat_vaziat_mali1:int = Query(description="صورت وضعیت نزد مالی تست 1"),
-            dardast_ejra2: int = Query(description="دردست اجرا تست 2:"),
-            tahie_soorat_vaziat2 : int = Query(description="تهیه صورت وضعیت تست 2"),
-            soorat_vaziat_setad2 : int = Query(description="صورت وضعیت نزد ستاد تست 2"),
-            soorat_vaziat_mali2 : int = Query(description="صورت وضعیت نزد مالی تست 2"),
-            dardast_ejra3 : int = Query(description="دردست اجرا تست 3:"),
-            tahie_soorat_vaziat3 : int = Query(description="تهیه صورت وضعیت تست 3"),
-            soorat_vaziat_setad3 : int = Query(description="صورت وضعیت نزد ستاد تست 3"),
-            soorat_vaziat_mali3:int = Query(description="صورت وضعیت نزد مالی تست 3"),
-            dardast_ejra4: int = Query(description="دردست اجرا تست 4:"),
-            tahie_soorat_vaziat4 : int = Query(description="تهیه صورت وضعیت تست 4"),
-            soorat_vaziat_moshaver4 : int = Query(description="صورت وضعیت نزد مشاور تست 4):"),
-            soorat_vaziat_setad4 : int = Query(description="صورت وضعیت نزد ستاد تست 4"),
-            soorat_vaziat_mali4:int = Query(description="صورت وضعیت نزد مالی تست 4"),
-            dardast_ejra5: int = Query(description="دردست اجرا تست 5:"),
-            tahie_soorat_vaziat5 : int = Query(description="تهیه صورت وضعیت تست 5"),
-            soorat_vaziat_moshaver5 : int = Query(description="صورت وضعیت نزد مشاور تست 5):"),
-            soorat_vaziat_setad5 : int = Query(description="صورت وضعیت نزد ستاد تست 5"),
-            soorat_vaziat_mali5:int = Query(description="صورت وضعیت نزد مالی تست 5"),
-            dardast_ejra6: int = Query(description="دردست اجرا تست 6:"),
-            tahie_soorat_vaziat6 : int = Query(description="تهیه صورت وضعیت تست 6"),
-            soorat_vaziat_moshaver6 : int = Query(description="صورت وضعیت نزد مشاور تست 6):"),
-            soorat_vaziat_setad6 : int = Query(description="صورت وضعیت نزد ستاد تست 6"),
-            soorat_vaziat_mali6:int = Query(description="صورت وضعیت نزد مالی تست 6"),
-            dardast_ejra7: int = Query(description="دردست اجرا تست 7:"),
-            tahie_soorat_vaziat7 : int = Query(description="تهیه صورت وضعیت تست 7"),
-            soorat_vaziat_moshaver7 : int = Query(description="صورت وضعیت نزد مشاور تست 7):"),
-            soorat_vaziat_setad7 : int = Query(description="صورت وضعیت نزد ستاد تست 7"),
-            soorat_vaziat_mali7:int = Query(description="صورت وضعیت نزد مالی تست 7"),
-            ):
+@router.delete("/tests_ref/edit")
+def delete_test_ref(testnum : int):
+    with Session1.begin() as con:
+        the_test = con.query(test_ref).where(test_ref.test_num == testnum).first()
+        if the_test:
+            try:
+                con.delete(the_test)
+                con.commit()
+                return{"deleted test ref"}
+            except:
+                return{"something went wrong"}
+        else:
+            return{"not found"}
+
+@router.get("/tests/get_test")
+def get_tests(test_num : Optional[int] = Query(description="search by test_num" , default=None) , city_name :Optional[str] = Query(description="search by city_name" , default=None) , year : Optional[int] = Query(default=None , description="search by year"), month:Optional[int] = Query(default=None , description="search by month")):
+    with Session1.begin() as con:
+        if test_num:
+            if city_name:
+                if year:
+                    if month:
+                        data =con.query(tests).where(and_(tests.city_name == city_name , tests.test_num == test_num , tests.year == year , tests.month == month)).all()
+                    else:
+                        data =con.query(tests).where(and_(tests.city_name == city_name , tests.test_num == test_num , tests.year == year )).all()
+                elif month:
+                    data =con.query(tests).where(and_(tests.city_name == city_name , tests.test_num == test_num , tests.month == month)).all()
+                else:
+                    data =con.query(tests).where(and_(tests.city_name == city_name , tests.test_num == test_num)).all()
+            elif year:
+                if month:
+                    data =con.query(tests).where(and_( tests.test_num == test_num , tests.year == year , tests.month == month)).all()
+                else:
+                    data =con.query(tests).where(and_( tests.test_num == test_num , tests.year == year )).all()
+            else:
+                if month:
+                    data =con.query(tests).where(and_(tests.test_num == test_num , tests.month == month)).all()
+                else:
+                    data =con.query(tests).where(tests.test_num == test_num).all()
+        elif city_name:
+            if year:
+                if month:
+                    data =con.query(tests).where(and_(tests.city_name == city_name , tests.year == year , tests.month == month)).all()
+                else:
+                    data =con.query(tests).where(and_(tests.city_name == city_name , tests.year == year)).all()
+            else:
+                if month:
+                    data =con.query(tests).where(and_(tests.city_name == city_name , tests.month == month)).all()
+                else:
+                    data =con.query(tests).where(tests.city_name == city_name).all()
+        elif year:
+            if month:
+                data =con.query(tests).where(and_(tests.year == year , tests.month == month)).all()
+            else:
+                data =con.query(tests).where(tests.year == year ).all()
+        elif month:
+            data = con.query(tests).where( tests.month == month).all()
+        else:
+            data = con.query(tests).where().all()
+        
+
+        collection_tests_refs = con.query(test_ref).all()
+        addcols :List[str]= []
+        
+        
+        addcols.append("city_name")
+        addcols.append("test_num")
+        addcols.append("year")
+        addcols.append("month")
+        addcols.append("dardast_ejra")
+        addcols.append("tahie_soorat_vaziat")
+        addcols.append("soorat_vaziat_setad")
+        addcols.append("soorat_vaziat_mali")
+        if data is not None:
+            for test in data:
+                q = test.additional_attrs
+                if q is not None:
+                    for x in q.keys():
+                        if x not in addcols:
+                            addcols.append(x)
+        
+        
+        rows_data = []  # لیست نهایی که قراره به DataFrame بدیم
+        
+        
+        for row in data:
+            row_dict = {}
+            for col in collection_tests_refs:
+                if col.test_num == row.test_num:
+                    for col1 in addcols:
+                        if hasattr(tests, col1):
+                            # چهار ستون اصلی
+                            if col1 == "city_name":
+                                row_dict["نام شهر"] = row.city_name
+                            elif col1 == "test_num":
+                                row_dict["شماره تست"] = row.test_num
+                            elif col1 == "year":
+                                row_dict["سال"] = row.year
+                            elif col1 == "month":
+                                row_dict["ماه"] = row.month
+                            elif col1 == "dardast_ejra":
+                                row_dict["در دست اجرا"] = row.dardast_ejra
+                            elif col1 == "tahie_soorat_vaziat":
+                                row_dict["تهیه صورت وضعیت"] = row.tahie_soorat_vaziat
+                            elif col1 == "soorat_vaziat_setad":
+                                row_dict["صورت وضعیت نزد ستاد"] = row.soorat_vaziat_setad
+                            elif col1 == "soorat_vaziat_mali":
+                                row_dict["صورت وضعیت نزد مالی"] = row.soorat_vaziat_mali
+                            
+                        elif col.additional_attrs and row.additional_attrs:
+                            # ستون‌های اضافی (دینامیک)
+                            for key in col.additional_attrs.keys():
+                                if key == col1:
+                                    row_dict[col.additional_attrs[key]] = row.additional_attrs.get(col1)
+                    # ✅ اینجا append کن، بعد از اینکه همه ویژگی‌ها اضافه شدن
+                    rows_data.append(row_dict)
+                    break  # فقط اولین ref که match شد کافیه
+        df = pd.DataFrame(rows_data)
+        df.replace([np.inf, -np.inf , np.nan], None, inplace=True)
+        # df.where(pd.notnull(df), None,inplace=True) 
+        return df.to_dict(orient="records")
+
+print(get_tests(None,None,None,None))
+class test_type(BaseModel):
+    city_name : str
+    test_num : int
+    year : int
+    month : int
+    dardast_ejra : int
+    tahie_soorat_vaziat : int
+    soorat_vaziat_setad : int
+    soorat_vaziat_mali : int
+    additional_attrs : Optional[Dict[str,int]]
+
+@router.post("/tests/add")
+def add_test(input : test_type):
     with Session1.begin() as con:
         try:
-            new_t1 = test1(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra1 , tahie_soorat_vaziat=tahie_soorat_vaziat1 , soorat_vaziat_setad=soorat_vaziat_setad1 , soorat_vaziat_mali=soorat_vaziat_mali1)
-            new_t2 = test2(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra2 , tahie_soorat_vaziat=tahie_soorat_vaziat2 , soorat_vaziat_setad=soorat_vaziat_setad2 , soorat_vaziat_mali=soorat_vaziat_mali2)
-            new_t3 = test3(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra3 , tahie_soorat_vaziat=tahie_soorat_vaziat3 , soorat_vaziat_setad=soorat_vaziat_setad3 , soorat_vaziat_mali=soorat_vaziat_mali3)
-            new_t4 = test4(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra4 , tahie_soorat_vaziat=tahie_soorat_vaziat4 ,soorat_vaziat_moshaver=soorat_vaziat_moshaver4, soorat_vaziat_setad=soorat_vaziat_setad4 , soorat_vaziat_mali=soorat_vaziat_mali4)
-            new_t5 = test5(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra5 , tahie_soorat_vaziat=tahie_soorat_vaziat5 ,soorat_vaziat_moshaver=soorat_vaziat_moshaver5, soorat_vaziat_setad=soorat_vaziat_setad5 , soorat_vaziat_mali=soorat_vaziat_mali5)
-            new_t6 = test6(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra6 , tahie_soorat_vaziat=tahie_soorat_vaziat6 ,soorat_vaziat_moshaver=soorat_vaziat_moshaver6, soorat_vaziat_setad=soorat_vaziat_setad6 , soorat_vaziat_mali=soorat_vaziat_mali6)
-            new_t7 = test7(city_name=city_name,year=year , month=month ,dardast_ejra=dardast_ejra7 , tahie_soorat_vaziat=tahie_soorat_vaziat7 ,soorat_vaziat_moshaver=soorat_vaziat_moshaver7, soorat_vaziat_setad=soorat_vaziat_setad7 , soorat_vaziat_mali=soorat_vaziat_mali7)
-            con.add_all([new_t1,new_t2,new_t3,new_t4,new_t5,new_t6,new_t7])
+            new_test = tests(input.city_name,input.test_num,input.year,input.month,input.dardast_ejra, input.tahie_soorat_vaziat,input.soorat_vaziat_mali,input.soorat_vaziat_mali,input.additional_attrs)
+            con.add(new_test)
             con.commit()
-            return{"massage":"test record added"}
-        except Exception as e:
-            print("خطا هنگام افزودن رکورد:")
-            print(e)
-            traceback.print_exc()
-            return {"message": f"something went wrong: {str(e)}"}
-        
-@router.post("/tests/add_one_test_record_NOT_RECOMMENDED")
-def add_test_NR(desc : None = Query(description="از این روت استفاده نکنید چون فقط یک رکورد برای یک تست اضافه میکند و باعث میشود که وقتی از روت tests/get_all میخواهید استفاده کنید با خطا روبرو شوید زیرا بقیه تست ها برای این شهر و ماه و سال خاص هیچ رکوردی ندارند بنابر این مقدار نال میشود و خطا میدهد"),
-    testname : str = Query(description=f"جدول را انتخاب کنید:{test1.__tablename__} \n {test2.__tablename__} \n {test3.__tablename__} \n {test4.__tablename__} \n {test5.__tablename__} \n {test6.__tablename__}\n{test7.__tablename__}") ,
-            city_name : str = Query(),
-            year : int = Query(),
-            month: int = Query(),
-            new_dardast_ejra: int = Query(description="دردست اجرا:"),
-            new_tahie_soorat_vaziat : int = Query(description="تهیه صورت وضعیت"),
-            new_soorat_vaziat_moshaver : Optional[int] = Query(default=None , description="صورت وضعیت نزد مشاور(فقط برا تست هل 4و5و6و7):"),
-            new_soorat_vaziat_setad : int = Query(description="صورت وضعیت نزد ستاد"),
-            new_soorat_vaziat_mali:int = Query(description="صورت وضعیت نزد مالی")
-            ):
+            return{"added"}
+        except:
+            return{"something went wrong"}
+
+class edit_test_type(BaseModel):
+    city_name : str
+    test_num : int
+    year : int
+    month : int        
+class edit_test_type_to_update(BaseModel):
+    dardast_ejra : int
+    tahie_soorat_vaziat : int
+    soorat_vaziat_setad : int
+    soorat_vaziat_mali : int
+    additional_attrs : Optional[Dict[str,int]]
+
+@router.put("/tests/edit")
+def edit_test(input:edit_test_type , update : edit_test_type_to_update):
     with Session1.begin() as con:
-        w = 0
-        for test in [test1 , test2 , test3 , test4 , test5 , test6 , test7 ]:
-            if test.__tablename__ == testname:
-                w +=1
-                try:
-                    if hasattr(test , "soorat_vaziat_moshaver"):
-                        new_test_rec = test(city_name = city_name,year = year , month =month ,dardast_ejra=new_dardast_ejra , tahie_soorat_vaziat=new_tahie_soorat_vaziat,soorat_vaziat_moshaver=new_soorat_vaziat_moshaver , soorat_vaziat_setad=new_soorat_vaziat_setad,soorat_vaziat_mali=new_soorat_vaziat_mali )
-                        con.add(new_test_rec)
-                        con.commit()
-                    else:
-                        new_test_rec = test(city_name = city_name,year = year , month =month ,dardast_ejra=new_dardast_ejra , tahie_soorat_vaziat=new_tahie_soorat_vaziat , soorat_vaziat_setad=new_soorat_vaziat_setad,soorat_vaziat_mali=new_soorat_vaziat_mali )
-                        con.add(new_test_rec)
-                        con.commit()
-                    return {"message": "record added succeccfully"}
-                except Exception as e:
-                    print("خطا هنگام ویرایش رکورد:")
-                    print(e)
-                    traceback.print_exc()
-                    return {"message": f"something went wrong: {str(e)}"}
-        if w == 0:
-            return {"massage": "test Not found"}
+        the_test = con.query(tests).where(and_(tests.city_name == input.city_name , tests.test_num == input.test_num,tests.year == input.year,tests.month == input.month)).first()
+        if the_test:
+            try:
+                the_test.dardast_ejra =update.dardast_ejra
+                the_test.tahie_soorat_vaziat = update.tahie_soorat_vaziat
+                the_test.soorat_vaziat_mali = update.soorat_vaziat_mali
+                the_test.soorat_vaziat_setad = update.soorat_vaziat_setad
+                the_test.additional_attrs = update.additional_attrs
+                con.commit()
+                return {"edited"}
+            except:
+                return{"something went wrong"}
+        else:
+            return{"not found"}
 
-
-@router.put("/tests/edit_test_record")
-def edit_test(testname : str = Query(description=f"جدول را انتخاب کنید:{test1.__tablename__} \n {test2.__tablename__} \n {test3.__tablename__} \n {test4.__tablename__} \n {test5.__tablename__} \n {test6.__tablename__}\n{test7.__tablename__}") ,
-            city_name : str = Query(),
-            year : int = Query(),
-            month: int = Query(),
-            new_dardast_ejra: int = Query(description="دردست اجرا:"),
-            new_tahie_soorat_vaziat : int = Query(description="تهیه صورت وضعیت"),
-            new_soorat_vaziat_moshaver : Optional[int] = Query(default=None , description="صورت وضعیت نزد مشاور(فقط برا تست هل 4و5و6و7):"),
-            new_soorat_vaziat_setad : int = Query(description="صورت وضعیت نزد ستاد"),
-            new_soorat_vaziat_mali:int = Query(description="صورت وضعیت نزد مالی")
-            ):
+@router.delete("/tests/delete")
+def delete_test(input:edit_test_type ):
     with Session1.begin() as con:
-        w = 0
-        for test in [test1 , test2 , test3 , test4 , test5 , test6 , test7 ]:
-            if test.__tablename__ == testname:
-                w +=1
-                try:
-                    rec = con.query(test).where(and_(test.city_name == city_name , test.year == year , test.month == month)).first()
-                    if rec:
-                        rec.dardast_ejra = new_dardast_ejra
-                        rec.tahie_soorat_vaziat = new_tahie_soorat_vaziat
-                        rec.soorat_vaziat_setad = new_soorat_vaziat_setad
-                        rec.soorat_vaziat_mali = new_soorat_vaziat_mali
-                        if hasattr(rec, "soorat_vaziat_moshaver"):
-                            rec.soorat_vaziat_moshaver = new_soorat_vaziat_moshaver
-                        
-                        con.commit()
-                        return{"massage":"successfully edited record"}
-                    else:
-                        return{"massage" : "record not found"}
-                except Exception as e:
-                    print("خطا هنگام ویرایش رکورد:")
-                    print(e)
-                    traceback.print_exc()
-                    return {"message": f"something went wrong: {str(e)}"}
-        if w == 0:
-            return {"massage": "test Not found"}
-
-@router.delete("/tests/delete_one_test_record_NOT_RECOMMENDED")
-def delete_record_NR(testname : str = Query(description=f"جدول را انتخاب کنید:\n {majmo.__tablename__} \n {test1.__tablename__} \n {test2.__tablename__} \n {test3.__tablename__} \n {test4.__tablename__} \n {test5.__tablename__} \n {test6.__tablename__}\n{test7.__tablename__}") ,
-            city_name : str = Query(),
-            year : int = Query(),
-            month: int = Query()):
-    w = 0
-    with Session1.begin()as con:
-        for test in [test1 , test2 , test3 , test4 , test5 , test6 , test7 ,majmo]:
-            if test.__tablename__ == testname:
-                w +=1
-                try:
-                    rec = con.query(test).where(and_(test.city_name == city_name , test.year == year , test.month == month)).first()
-                    if rec:
-                        con.delete(rec)
-                        con.commit()
-                        return{"massage" : "successfully deleted"}
-                    else:
-                        return{"massage" : "record not found"}
-                except Exception as e:
-                    print("خطا هنگام ویرایش رکورد:")
-                    print(e)
-                    traceback.print_exc()
-                    return {"message": f"something went wrong: {str(e)}"}
-        if w == 0:
-            return{"massage" : "table not found"}
-        
-
-@router.delete("/tests/delete_test_record")
-def delete_record(
-            city_name : str = Query(),
-            year : int = Query(),
-            month: int = Query()):
-    try:
-        with Session1.begin()as con:
-            for model in [test1, test2, test3, test4, test5, test6, test7]:
-                records = con.query(model).where(and_(model.city_name == city_name , model.year == year , model.month == month)).all()
-                if len(records) != 0: 
-                    for rec in records:
-                        con.delete(rec)
-            con.commit()
-        with Session1.begin() as con1:
-            recmajmo = con1.query(majmo).where(and_(majmo.city_name == city_name , majmo.year == year , majmo.month == month)).all()
-            if len(recmajmo) != 0:
-                for recm in recmajmo:
-                    con1.delete(recm)
-            con1.commit()
-            return{"massage" : "successfully deleted"}
-    except Exception as e:
-        print("خطا هنگام حذف رکورد:")
-        print(e)
-        traceback.print_exc()
-        return {"message": f"something went wrong: {str(e)}"}  
-          '''
+        the_test = con.query(tests).where(and_(tests.city_name == input.city_name , tests.test_num == input.test_num,tests.year == input.year,tests.month == input.month)).first()
+        if the_test:
+            try:
+                con.delete(the_test)
+                con.commit()
+                return {"deleted"}
+            except:
+                return{"something went wrong"}
+        else:
+            return{"not found"}
